@@ -5,7 +5,10 @@ import re
 import datetime
 from dotenv import load_dotenv
 from typing import List
-from fastapi import FastAPI, File, UploadFile, HTTPException
+# --- CHANGE START ---
+# Import Form and Depends for the new upload endpoint
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form, Depends
+# --- CHANGE END ---
 from pydantic import BaseModel
 from pinecone import Pinecone, ServerlessSpec
 from pymongo import MongoClient
@@ -25,6 +28,11 @@ load_dotenv()
 
 #initialzie the server
 app = FastAPI()
+
+# Add health check endpoint for Render
+@app.get("/")
+def health_check():
+    return {"status": "ok"}
 
 #cors 
 origins = [
@@ -48,8 +56,8 @@ try:
  db = client["Vedas-RAG"]
  chats_collection = db["chats"] 
 except Exception as e:
- print("error in Mongo {e}")
-client = None 
+ print(f"error in Mongo {e}")
+ client = None 
 
 #PINECONE SETUP
 try:
@@ -114,7 +122,6 @@ def save_chat(session_id, user_msg, assistant_msg):
         print(f"Failed to save chat: {e}")
 
 def fetch_history(session_id, limit=20):
-    from datetime import datetime
     try:
         if chats_collection is not None:
             history = list(chats_collection.find({"session_id": session_id}).sort("timestamp", -1).limit(limit))
@@ -123,36 +130,53 @@ def fetch_history(session_id, limit=20):
     except Exception as e:
         print(f" Failed to fetch history: {e}")
     return []
+
+# --- CHANGE START: Modified upload_pdf endpoint ---
+# It now accepts a 'session_id' from a form field along with the file.
 @app.post("/upload_pdf/")
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(session_id: str = Form(...), file: UploadFile = File(...)):
     if not all([pc, embeddings]):
         raise HTTPException(status_code=500, detail="Pinecone or Embeddings not initialized")
     try:
         docs = extract_text_from_pdf(file)
-        vectorstore = PineconeVectorStore.from_documents(docs, embeddings, index_name=INDEX_NAME)
-        return {"message": f"PDF uploaded & processed ({len(docs)} chunks) into Pinecone."}
+        # We use the provided session_id as the namespace to isolate the data.
+        vectorstore = PineconeVectorStore.from_documents(
+            docs, 
+            embeddings, 
+            index_name=INDEX_NAME, 
+            namespace=session_id
+        )
+        return {"message": f"PDF processed for session {session_id}."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"PDF upload failed: {e}")
+# --- CHANGE END ---
     
 @app.post("/chat/")
 async def chat(req: ChatRequest):
     if not all([pc, embeddings, llm]):
         raise HTTPException(status_code=500, detail="Services not initialized")
     try:
-        # Short-term memory
+        # Short-term memory (no changes needed here)
         history = fetch_history(req.session_id)
         history_text = "\n".join([f"{h['role']}: {h['content']}" for h in history])
 
         # Long-term memory from Pinecone
         try:
-            vectorstore = PineconeVectorStore.from_existing_index(INDEX_NAME, embeddings)
-            docs = vectorstore.similarity_search(req.query, k=3)
+            # --- CHANGE START: Modified Pinecone retrieval ---
+            # We tell Pinecone to ONLY search within the namespace of the current session.
+            vectorstore = PineconeVectorStore.from_existing_index(
+                INDEX_NAME, 
+                embeddings, 
+                namespace=req.session_id
+            )
+            # --- CHANGE END ---
+            docs = vectorstore.similarity_search(req.query, k=5)
             context_text = "\n".join([d.page_content for d in docs])
         except Exception as e:
             context_text = ""
             print(f" Pinecone retrieval failed: {e}")
 
-        # Build final prompt
+        # Build final prompt 
         prompt = f"""
 You are a helpful assistant named Ved.Your goal is to answer the user's question accurately and concisely based on the following information:
 
@@ -178,9 +202,9 @@ Answer:
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"LLM response failed: {e}")
 
-        # Save conversation
+        # Save conversation (no changes needed here)
         save_chat(req.session_id, req.query, response)
 
         return {"response": response}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chat failed: {e}")    
+        raise HTTPException(status_code=500, detail=f"Chat failed: {e}")
