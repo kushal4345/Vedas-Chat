@@ -39,7 +39,8 @@ origins = [
     "http://127.0.0.1:5500", 
     "http://localhost:5500",
     "http://localhost:3000",  # for local React
-    "https://thevedasinstitute-frontend.vercel.app",  # your deployed React
+    "http://localhost:5173",  # for Vite development server
+    "https://the-vedas-institute-frontend-3bvu.vercel.app",  # Your production Vercel domain
     "https://yourcustomdomain.com"  # if you add custom domain
 ]
 
