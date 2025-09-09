@@ -38,8 +38,9 @@ def health_check():
 origins = [
     "http://127.0.0.1:5500", 
     "http://localhost:5500",
-    "null", 
-   
+    "http://localhost:3000",  # for local React
+    "https://thevedasinstitute-frontend.vercel.app",  # your deployed React
+    "https://yourcustomdomain.com"  # if you add custom domain
 ]
 
 app.add_middleware(
@@ -47,7 +48,7 @@ app.add_middleware(
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
-    allow_headers=["*"], 
+    allow_headers=["*"],
 )
 #mongo setup 
 try:
@@ -116,7 +117,7 @@ def save_chat(session_id, user_msg, assistant_msg):
             chats_collection.insert_many([
                 {"session_id": session_id, "role": "user", "content": user_msg, "timestamp":now
 },
-                {"session_id": session_id, "role": "assistant", "content": assistant_msg, "timestamp": datetime.utcnow()}
+                {"session_id": session_id, "role": "assistant", "content": assistant_msg, "timestamp": now}
             ])
     except Exception as e:
         print(f"Failed to save chat: {e}")
