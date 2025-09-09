@@ -42,6 +42,8 @@ origins = [
     "http://localhost:5173",  # for Vite development server
     "https://the-vedas-institute-frontend-3bvu.vercel.app",  # Your production Vercel domain
     "https://yourcustomdomain.com"  # if you add custom domain
+    ,
+    "https://the-vedas-institute-frontend-kushal4345s-projects.vercel.app"
 ]
 
 app.add_middleware(
